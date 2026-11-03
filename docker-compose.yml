@@ -1,0 +1,60 @@
+services:
+  database:
+    image: mariadb:11
+    container_name: student-db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: ${DB_NAME:-studentdb}
+      MARIADB_USER: ${DB_USER:-studentuser}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
+    volumes:
+      - student_db_data:/var/lib/mysql
+    networks:
+      - student-network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: student-backend:latest
+    container_name: student-backend
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mariadb://database:3306/${DB_NAME:-studentdb}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-studentuser}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${DDL_AUTO:-update}
+    depends_on:
+      database:
+        condition: service_healthy
+    expose:
+      - "8080"
+    networks:
+      - student-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: student-frontend:latest
+    container_name: student-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - student-network
+
+volumes:
+  student_db_data:
+
+networks:
+  student-network:
+    driver: bridge
